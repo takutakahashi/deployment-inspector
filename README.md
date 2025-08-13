@@ -1,11 +1,39 @@
-# K8s Pod Node Job
+# Deployment Inspector
 
 Kubernetesクラスター内でDeploymentが作成したPodを一覧表示し、それらのPodが実行されているノード上でJobを起動するツールです。
+
+## パッケージ構造
+
+```
+.
+├── cmd/
+│   └── deployment-inspector/
+│       └── main.go          # CLIエントリーポイント
+├── pkg/
+│   └── k8s/
+│       ├── client.go        # Kubernetesクライアント管理
+│       ├── client_test.go   
+│       ├── deployment.go    # Deployment操作
+│       ├── deployment_test.go
+│       ├── job.go          # Job操作
+│       └── job_test.go
+└── go.mod
+```
 
 ## ビルド
 
 ```bash
-mise exec -- go build -o k8s-pod-node-job main.go
+mise exec -- go build -o deployment-inspector ./cmd/deployment-inspector
+```
+
+## テスト
+
+```bash
+# 全テストを実行
+mise exec -- go test ./...
+
+# 詳細な出力付き
+mise exec -- go test -v ./...
 ```
 
 ## 使い方
@@ -13,27 +41,27 @@ mise exec -- go build -o k8s-pod-node-job main.go
 ### 1. Podとノードの一覧表示
 
 ```bash
-./k8s-pod-node-job list <deployment-name> [-n namespace]
+./deployment-inspector list <deployment-name> [-n namespace]
 ```
 
 例:
 ```bash
-./k8s-pod-node-job list nginx-deployment -n production
+./deployment-inspector list nginx-deployment -n production
 ```
 
 ### 2. 全ノードでJobを起動
 
 ```bash
-./k8s-pod-node-job run-job <deployment-name> <job-name> [-n namespace] [-i image] [-c command]
+./deployment-inspector run-job <deployment-name> <job-name> [-n namespace] [-i image] [-c command]
 ```
 
 例:
 ```bash
 # デフォルトコマンドでJobを実行
-./k8s-pod-node-job run-job nginx-deployment cleanup-job -n production
+./deployment-inspector run-job nginx-deployment cleanup-job -n production
 
 # カスタムイメージとコマンドでJobを実行
-./k8s-pod-node-job run-job nginx-deployment cleanup-job -n production -i alpine:latest -c "ls,-la,/tmp"
+./deployment-inspector run-job nginx-deployment cleanup-job -n production -i alpine:latest -c "ls,-la,/tmp"
 ```
 
 ## 認証
