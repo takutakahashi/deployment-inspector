@@ -69,6 +69,29 @@ mise exec -- go test -v ./...
 - クラスター内で実行する場合: InClusterConfigを自動的に使用
 - クラスター外で実行する場合: `~/.kube/config`を使用
 
+## Docker Image
+
+このツールはDockerイメージとしても利用できます：
+
+```bash
+# イメージをプル
+docker pull ghcr.io/takutakahashi/deployment-inspector:latest
+
+# Kubernetesクラスター内で実行
+docker run --rm ghcr.io/takutakahashi/deployment-inspector:latest list nginx-deployment
+
+# ローカルのkubeconfigを使用
+docker run --rm -v ~/.kube:/root/.kube ghcr.io/takutakahashi/deployment-inspector:latest list nginx-deployment
+```
+
+## CI/CD
+
+GitHub ActionsでDockerイメージを自動ビルドしてGitHub Container Registry (ghcr.io) にプッシュします：
+
+- `main`ブランチへのプッシュ: `latest`タグでビルド
+- タグプッシュ: セマンティックバージョンでビルド
+- PR: プレビューイメージをビルド
+
 ## オプション
 
 - `-n, --namespace`: Kubernetesネームスペース (デフォルト: default)
