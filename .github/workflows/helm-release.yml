@@ -3,7 +3,7 @@ name: Release Helm Chart
 on:
   push:
     tags:
-      - 'chart-v*.*.*'
+      - 'v*.*.*'
   workflow_dispatch:
 
 env:
@@ -28,8 +28,8 @@ jobs:
       - name: Extract version from tag
         id: get_version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/chart-v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/chart-}
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
           else
             VERSION="v0.1.0"
           fi
