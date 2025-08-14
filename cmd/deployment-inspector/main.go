@@ -1,14 +1,83 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/takutakahashi/deployment-inspector/pkg/k8s"
 )
+
+var (
+	rootCmd = &cobra.Command{
+		Use:   "deployment-inspector",
+		Short: "A tool to inspect Kubernetes deployments and run jobs on their nodes",
+		Long: `deployment-inspector is a CLI tool that helps you inspect Kubernetes deployments
+and run jobs on the nodes where deployment pods are running.`,
+	}
+
+	listCmd = &cobra.Command{
+		Use:   "list <deployment-name>",
+		Short: "List pods and nodes for a deployment",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deploymentName := args[0]
+			namespace := viper.GetString("namespace")
+			return listPodsAndNodes(deploymentName, namespace)
+		},
+	}
+
+	runJobCmd = &cobra.Command{
+		Use:   "run-job <deployment-name> <job-name>",
+		Short: "Run a job on nodes where deployment pods are running",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deploymentName := args[0]
+			jobName := args[1]
+			namespace := viper.GetString("namespace")
+			jobNamespace := viper.GetString("job-namespace")
+			image := viper.GetString("image")
+			commandStr := viper.GetString("command")
+
+			// If job namespace is not specified, use the deployment namespace
+			if jobNamespace == "" {
+				jobNamespace = namespace
+			}
+
+			var command []string
+			if commandStr != "" {
+				command = strings.Split(commandStr, ",")
+				for i := range command {
+					command[i] = strings.TrimSpace(command[i])
+				}
+			}
+
+			return runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, command)
+		},
+	}
+)
+
+func init() {
+	// Persistent flags available to all commands
+	rootCmd.PersistentFlags().StringP("namespace", "n", "default", "Kubernetes namespace")
+	viper.BindPFlag("namespace", rootCmd.PersistentFlags().Lookup("namespace"))
+
+	// Run-job specific flags
+	runJobCmd.Flags().StringP("job-namespace", "j", "", "Kubernetes namespace for job (defaults to deployment namespace)")
+	runJobCmd.Flags().StringP("image", "i", "busybox", "Container image for the job")
+	runJobCmd.Flags().StringP("command", "c", "", "Command to run in the job (comma-separated)")
+	
+	viper.BindPFlag("job-namespace", runJobCmd.Flags().Lookup("job-namespace"))
+	viper.BindPFlag("image", runJobCmd.Flags().Lookup("image"))
+	viper.BindPFlag("command", runJobCmd.Flags().Lookup("command"))
+
+	// Add commands to root
+	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(runJobCmd)
+}
 
 func listPodsAndNodes(deploymentName, namespace string) error {
 	client := k8s.NewClient("")
@@ -25,11 +94,11 @@ func listPodsAndNodes(deploymentName, namespace string) error {
 	}
 
 	if len(pods) == 0 {
-		fmt.Printf("No pods found for deployment %s\n", deploymentName)
+		fmt.Printf("No pods found for deployment %s in namespace %s\n", deploymentName, namespace)
 		return nil
 	}
 
-	fmt.Printf("\nPods from deployment '%s':\n", deploymentName)
+	fmt.Printf("\nPods from deployment '%s' in namespace '%s':\n", deploymentName, namespace)
 	fmt.Println(strings.Repeat("-", 60))
 	fmt.Printf("%-40s %-20s\n", "Pod Name", "Node")
 	fmt.Println(strings.Repeat("-", 60))
@@ -69,7 +138,7 @@ func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image strin
 	}
 
 	if len(pods) == 0 {
-		fmt.Printf("No pods found for deployment %s\n", deploymentName)
+		fmt.Printf("No pods found for deployment %s in namespace %s\n", deploymentName, namespace)
 		return nil
 	}
 
@@ -79,7 +148,7 @@ func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image strin
 		return nil
 	}
 
-	fmt.Printf("\nCreating jobs on %d nodes...\n", len(nodes))
+	fmt.Printf("\nCreating jobs on %d nodes in namespace %s...\n", len(nodes), jobNamespace)
 	
 	jobs, err := jobManager.CreateJobOnNodes(jobName, nodes, jobNamespace, image, command)
 	if err != nil {
@@ -100,78 +169,8 @@ func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image strin
 }
 
 func main() {
-	var (
-		namespace    string
-		jobNamespace string
-		image        string
-		command      string
-	)
-
-	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
-	listCmd.StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
-	listCmd.StringVar(&namespace, "n", "default", "Kubernetes namespace (shorthand)")
-
-	runJobCmd := flag.NewFlagSet("run-job", flag.ExitOnError)
-	runJobCmd.StringVar(&namespace, "namespace", "default", "Kubernetes namespace for deployment")
-	runJobCmd.StringVar(&namespace, "n", "default", "Kubernetes namespace for deployment (shorthand)")
-	runJobCmd.StringVar(&jobNamespace, "job-namespace", "", "Kubernetes namespace for job (defaults to deployment namespace)")
-	runJobCmd.StringVar(&jobNamespace, "jn", "", "Kubernetes namespace for job (shorthand)")
-	runJobCmd.StringVar(&image, "image", "busybox", "Container image for the job")
-	runJobCmd.StringVar(&image, "i", "busybox", "Container image for the job (shorthand)")
-	runJobCmd.StringVar(&command, "command", "", "Command to run in the job (comma-separated)")
-	runJobCmd.StringVar(&command, "c", "", "Command to run in the job (comma-separated, shorthand)")
-
-	if len(os.Args) < 2 {
-		fmt.Println("Usage:")
-		fmt.Println("  deployment-inspector list <deployment-name> [-n namespace]")
-		fmt.Println("  deployment-inspector run-job <deployment-name> <job-name> [-n namespace] [-jn job-namespace] [-i image] [-c command]")
-		os.Exit(1)
-	}
-
-	switch os.Args[1] {
-	case "list":
-		listCmd.Parse(os.Args[2:])
-		args := listCmd.Args()
-		if len(args) < 1 {
-			fmt.Println("Error: deployment name is required")
-			os.Exit(1)
-		}
-		deploymentName := args[0]
-
-		if err := listPodsAndNodes(deploymentName, namespace); err != nil {
-			log.Fatalf("Error: %v", err)
-		}
-
-	case "run-job":
-		runJobCmd.Parse(os.Args[2:])
-		args := runJobCmd.Args()
-		if len(args) < 2 {
-			fmt.Println("Error: deployment name and job name are required")
-			os.Exit(1)
-		}
-		deploymentName := args[0]
-		jobName := args[1]
-
-		// If job namespace is not specified, use the deployment namespace
-		if jobNamespace == "" {
-			jobNamespace = namespace
-		}
-
-		var cmdSlice []string
-		if command != "" {
-			cmdSlice = strings.Split(command, ",")
-			for i := range cmdSlice {
-				cmdSlice[i] = strings.TrimSpace(cmdSlice[i])
-			}
-		}
-
-		if err := runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, cmdSlice); err != nil {
-			log.Fatalf("Error: %v", err)
-		}
-
-	default:
-		fmt.Printf("Unknown command: %s\n", os.Args[1])
-		fmt.Println("Use 'list' or 'run-job'")
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
