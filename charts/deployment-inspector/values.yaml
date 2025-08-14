@@ -1,0 +1,111 @@
+# Default values for deployment-inspector.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/takutakahashi/deployment-inspector
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# CronJob configuration
+cronjob:
+  # Enable/disable the CronJob
+  enabled: true
+  # Schedule for the CronJob (default: every hour)
+  schedule: "0 * * * *"
+  # Successful job history limit
+  successfulJobsHistoryLimit: 3
+  # Failed job history limit
+  failedJobsHistoryLimit: 1
+  # Concurrency policy: Allow, Forbid, Replace
+  concurrencyPolicy: Forbid
+  # Suspend the cronjob
+  suspend: false
+  # Time to live for the Job (in seconds) - job will be automatically deleted after this time
+  ttlSecondsAfterFinished: 3600
+  # Restart policy for the job
+  restartPolicy: OnFailure
+  # Backoff limit for the job
+  backoffLimit: 3
+
+# Configuration for deployment-inspector
+deploymentInspector:
+  # Command to run: "list" or "run-job"
+  command: "list"
+  # Target deployment name
+  deploymentName: ""
+  # Namespace where the target deployment is located
+  namespace: "default"
+  # For run-job command
+  job:
+    # Job name prefix (will be appended with timestamp)
+    namePrefix: "inspector-job"
+    # Namespace where jobs will be created
+    namespace: ""
+    # Container image for the job
+    image: "busybox"
+    # Command to run in the job
+    command: []
+    # Example: ["sh", "-c", "echo 'Hello from node'"]
+
+# Pod resource limits and requests
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity for pod assignment
+affinity: {}
+
+# Pod Security Context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# Container Security Context
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Additional environment variables
+env: []
+  # - name: EXAMPLE_VAR
+  #   value: "example-value"
+
+# Additional labels
+labels: {}
+
+# Additional annotations
+annotations: {}
