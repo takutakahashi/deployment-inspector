@@ -49,7 +49,7 @@ func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"job-name": jobName,
+							"job-name": jobInstanceName,
 						},
 					},
 					Spec: corev1.PodSpec{
