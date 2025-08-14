@@ -59,7 +59,7 @@ spec:
             - ./deployment-inspector
             - list
             - {{ required "deploymentInspector.deploymentName is required" .Values.deploymentInspector.deploymentName | quote }}
-            - "-n"
+            - "--namespace"
             - {{ .Values.deploymentInspector.namespace | quote }}
             {{- else if eq .Values.deploymentInspector.command "run-job" }}
             command:
@@ -67,16 +67,16 @@ spec:
             - run-job
             - {{ required "deploymentInspector.deploymentName is required" .Values.deploymentInspector.deploymentName | quote }}
             - {{ .Values.deploymentInspector.job.namePrefix | quote }}
-            - "-n"
+            - "--namespace"
             - {{ .Values.deploymentInspector.namespace | quote }}
             {{- if .Values.deploymentInspector.job.namespace }}
-            - "-jn"
+            - "--job-namespace"
             - {{ .Values.deploymentInspector.job.namespace | quote }}
             {{- end }}
-            - "-i"
+            - "--image"
             - {{ .Values.deploymentInspector.job.image | quote }}
             {{- if .Values.deploymentInspector.job.command }}
-            - "-c"
+            - "--command"
             - {{ join "," .Values.deploymentInspector.job.command | quote }}
             {{- end }}
             {{- end }}
