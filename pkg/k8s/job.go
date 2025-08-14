@@ -18,11 +18,11 @@ type JobManagerInterface interface {
 
 // JobManager manages job-related operations
 type JobManager struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewJobManager creates a new job manager
-func NewJobManager(clientset *kubernetes.Clientset) JobManagerInterface {
+func NewJobManager(clientset kubernetes.Interface) JobManagerInterface {
 	return &JobManager{
 		clientset: clientset,
 	}

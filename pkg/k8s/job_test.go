@@ -1,54 +1,182 @@
 package k8s
 
 import (
+	"context"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestJobManager_CreateJobOnNodes(t *testing.T) {
-	// This test requires a mock or fake clientset for proper unit testing
-	// For now, we'll test the job name generation logic
-	
 	tests := []struct {
-		name    string
-		jobName string
-		nodes   []string
-		command []string
+		name      string
+		jobName   string
+		nodes     []string
+		namespace string
+		image     string
+		command   []string
+		wantErr   bool
 	}{
 		{
-			name:    "default command",
-			jobName: "test-job",
-			nodes:   []string{"node1", "node2"},
-			command: nil,
+			name:      "create job with default command",
+			jobName:   "test-job",
+			nodes:     []string{"node1", "node2"},
+			namespace: "default",
+			image:     "busybox",
+			command:   nil,
+			wantErr:   false,
 		},
 		{
-			name:    "custom command",
-			jobName: "test-job",
-			nodes:   []string{"node1"},
-			command: []string{"ls", "-la"},
+			name:      "create job with custom command",
+			jobName:   "test-job",
+			nodes:     []string{"node1"},
+			namespace: "custom-namespace",
+			image:     "alpine",
+			command:   []string{"ls", "-la"},
+			wantErr:   false,
 		},
 		{
-			name:    "node with dots",
-			jobName: "test-job",
-			nodes:   []string{"node1.example.com"},
-			command: []string{"echo", "test"},
+			name:      "create job with node containing dots",
+			jobName:   "test-job",
+			nodes:     []string{"node1.example.com"},
+			namespace: "default",
+			image:     "busybox",
+			command:   []string{"echo", "test"},
+			wantErr:   false,
+		},
+		{
+			name:      "create job with empty nodes",
+			jobName:   "test-job",
+			nodes:     []string{},
+			namespace: "default",
+			image:     "busybox",
+			command:   []string{"echo", "test"},
+			wantErr:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Without a fake clientset, we can only test basic validation
-			if len(tt.nodes) == 0 {
-				t.Skip("Skipping test with no nodes")
+			// Create fake clientset
+			clientset := fake.NewSimpleClientset()
+			jm := &JobManager{clientset: clientset}
+
+			// Execute
+			jobs, err := jm.CreateJobOnNodes(tt.jobName, tt.nodes, tt.namespace, tt.image, tt.command)
+
+			// Check error
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateJobOnNodes() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			
-			// Test that command defaults are set correctly
-			cmd := tt.command
-			if len(cmd) == 0 {
-				cmd = []string{"echo", "Job running on node"}
+
+			// Check number of jobs created
+			if len(jobs) != len(tt.nodes) {
+				t.Errorf("Expected %d jobs, got %d", len(tt.nodes), len(jobs))
 			}
-			
-			if tt.command == nil && len(cmd) != 2 {
-				t.Errorf("Default command should have 2 elements, got %d", len(cmd))
+
+			// Verify jobs were created with correct configuration
+			for i, node := range tt.nodes {
+				jobName := jobs[i]
+				
+				// Get the created job
+				job, err := clientset.BatchV1().Jobs(tt.namespace).Get(context.TODO(), jobName, metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("Failed to get created job %s: %v", jobName, err)
+					continue
+				}
+
+				// Verify namespace
+				if job.Namespace != tt.namespace {
+					t.Errorf("Expected namespace %s, got %s", tt.namespace, job.Namespace)
+				}
+
+				// Verify TTL is set
+				if job.Spec.TTLSecondsAfterFinished == nil {
+					t.Error("TTLSecondsAfterFinished should be set")
+				} else if *job.Spec.TTLSecondsAfterFinished != 300 {
+					t.Errorf("Expected TTL 300, got %d", *job.Spec.TTLSecondsAfterFinished)
+				}
+
+				// Verify node selector
+				if job.Spec.Template.Spec.NodeSelector["kubernetes.io/hostname"] != node {
+					t.Errorf("Expected node selector %s, got %s", node, job.Spec.Template.Spec.NodeSelector["kubernetes.io/hostname"])
+				}
+
+				// Verify image
+				if len(job.Spec.Template.Spec.Containers) > 0 {
+					if job.Spec.Template.Spec.Containers[0].Image != tt.image {
+						t.Errorf("Expected image %s, got %s", tt.image, job.Spec.Template.Spec.Containers[0].Image)
+					}
+				}
+
+				// Verify command
+				expectedCmd := tt.command
+				if len(expectedCmd) == 0 {
+					expectedCmd = []string{"echo", "Job running on node"}
+				}
+				
+				if len(job.Spec.Template.Spec.Containers) > 0 {
+					actualCmd := job.Spec.Template.Spec.Containers[0].Command
+					if len(actualCmd) != len(expectedCmd) {
+						t.Errorf("Expected command length %d, got %d", len(expectedCmd), len(actualCmd))
+					}
+				}
+
+				// Verify job-name label matches job instance name
+				if job.Spec.Template.Labels["job-name"] != jobName {
+					t.Errorf("Expected job-name label %s, got %s", jobName, job.Spec.Template.Labels["job-name"])
+				}
+			}
+		})
+	}
+}
+
+func TestJobManager_JobNameGeneration(t *testing.T) {
+	tests := []struct {
+		name     string
+		jobName  string
+		nodeName string
+		index    int
+		expected string
+	}{
+		{
+			name:     "simple node name",
+			jobName:  "test",
+			nodeName: "node1",
+			index:    0,
+			expected: "test-node1-0",
+		},
+		{
+			name:     "node with dots",
+			jobName:  "test",
+			nodeName: "node1.example.com",
+			index:    0,
+			expected: "test-node1-example-com-0",
+		},
+		{
+			name:     "multiple index",
+			jobName:  "test",
+			nodeName: "node1",
+			index:    0,
+			expected: "test-node1-0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This test verifies the job naming logic by checking created jobs
+			clientset := fake.NewSimpleClientset()
+			jm := &JobManager{clientset: clientset}
+
+			jobs, err := jm.CreateJobOnNodes(tt.jobName, []string{tt.nodeName}, "default", "busybox", nil)
+			if err != nil {
+				t.Fatalf("CreateJobOnNodes() error = %v", err)
+			}
+
+			if len(jobs) > 0 && jobs[0] != tt.expected {
+				t.Errorf("Expected job name %s, got %s", tt.expected, jobs[0])
 			}
 		})
 	}
