@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+mise.toml
+deployment-inspector
+k8s-pod-node-job
