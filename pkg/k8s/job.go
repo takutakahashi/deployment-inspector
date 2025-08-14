@@ -40,12 +40,14 @@ func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace
 	for i, node := range nodes {
 		jobInstanceName := fmt.Sprintf("%s-%s-%d", jobName, strings.ReplaceAll(node, ".", "-"), i)
 		
+		ttlSecondsAfterFinished := int32(300) // 5 minutes after completion
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jobInstanceName,
 				Namespace: namespace,
 			},
 			Spec: batchv1.JobSpec{
+				TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
