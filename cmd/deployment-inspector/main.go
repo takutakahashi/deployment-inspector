@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/takutakahashi/deployment-inspector/pkg/k8s"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -41,6 +43,7 @@ and run jobs on the nodes where deployment pods are running.`,
 			jobNamespace := viper.GetString("job-namespace")
 			image := viper.GetString("image")
 			commandStr := viper.GetString("command")
+			tolerationsStr := viper.GetString("tolerations")
 
 			// If job namespace is not specified, use the deployment namespace
 			if jobNamespace == "" {
@@ -55,7 +58,17 @@ and run jobs on the nodes where deployment pods are running.`,
 				}
 			}
 
-			return runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, command)
+			// Parse tolerations from JSON string or simple format
+			var tolerations []corev1.Toleration
+			if tolerationsStr != "" {
+				var err error
+				tolerations, err = parseTolerations(tolerationsStr)
+				if err != nil {
+					return fmt.Errorf("failed to parse tolerations: %v", err)
+				}
+			}
+
+			return runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, command, tolerations)
 		},
 	}
 )
@@ -69,14 +82,84 @@ func init() {
 	runJobCmd.Flags().StringP("job-namespace", "j", "", "Kubernetes namespace for job (defaults to deployment namespace)")
 	runJobCmd.Flags().StringP("image", "i", "busybox", "Container image for the job")
 	runJobCmd.Flags().StringP("command", "c", "", "Command to run in the job (comma-separated)")
+	runJobCmd.Flags().StringP("tolerations", "t", "", "Tolerations for the job pods (JSON format or key=value:effect)")
 	
 	viper.BindPFlag("job-namespace", runJobCmd.Flags().Lookup("job-namespace"))
 	viper.BindPFlag("image", runJobCmd.Flags().Lookup("image"))
 	viper.BindPFlag("command", runJobCmd.Flags().Lookup("command"))
+	viper.BindPFlag("tolerations", runJobCmd.Flags().Lookup("tolerations"))
 
 	// Add commands to root
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runJobCmd)
+}
+
+// parseTolerations parses tolerations from either JSON format or simple key=value:effect format
+func parseTolerations(tolerationsStr string) ([]corev1.Toleration, error) {
+	// Try JSON format first
+	var tolerations []corev1.Toleration
+	if strings.HasPrefix(tolerationsStr, "[") {
+		err := json.Unmarshal([]byte(tolerationsStr), &tolerations)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON format: %v", err)
+		}
+		return tolerations, nil
+	}
+
+	// Parse simple format: key=value:effect or key:effect
+	parts := strings.Split(tolerationsStr, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Parse key=value:effect or key:effect
+		var key, value, effect string
+		if strings.Contains(part, ":") {
+			colonParts := strings.SplitN(part, ":", 2)
+			effect = strings.TrimSpace(colonParts[1])
+			keyValue := strings.TrimSpace(colonParts[0])
+
+			if strings.Contains(keyValue, "=") {
+				equalParts := strings.SplitN(keyValue, "=", 2)
+				key = strings.TrimSpace(equalParts[0])
+				value = strings.TrimSpace(equalParts[1])
+			} else {
+				key = keyValue
+			}
+		} else {
+			return nil, fmt.Errorf("invalid toleration format: %s (expected key=value:effect or key:effect)", part)
+		}
+
+		// Convert effect string to TaintEffect
+		var taintEffect corev1.TaintEffect
+		switch strings.ToLower(effect) {
+		case "noschedule":
+			taintEffect = corev1.TaintEffectNoSchedule
+		case "preferredschedule", "prefernoschedule":
+			taintEffect = corev1.TaintEffectPreferNoSchedule
+		case "noexecute":
+			taintEffect = corev1.TaintEffectNoExecute
+		default:
+			return nil, fmt.Errorf("invalid taint effect: %s (expected NoSchedule, PreferNoSchedule, or NoExecute)", effect)
+		}
+
+		// Determine operator
+		operator := corev1.TolerationOpEqual
+		if value == "" {
+			operator = corev1.TolerationOpExists
+		}
+
+		tolerations = append(tolerations, corev1.Toleration{
+			Key:      key,
+			Operator: operator,
+			Value:    value,
+			Effect:   taintEffect,
+		})
+	}
+
+	return tolerations, nil
 }
 
 func listPodsAndNodes(deploymentName, namespace string) error {
@@ -122,7 +205,7 @@ func listPodsAndNodes(deploymentName, namespace string) error {
 	return nil
 }
 
-func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image string, command []string) error {
+func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image string, command []string, tolerations []corev1.Toleration) error {
 	client := k8s.NewClient("")
 	clientset, err := client.GetClient()
 	if err != nil {
@@ -150,7 +233,7 @@ func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image strin
 
 	fmt.Printf("\nCreating jobs on %d nodes in namespace %s...\n", len(nodes), jobNamespace)
 	
-	jobs, err := jobManager.CreateJobOnNodes(jobName, nodes, jobNamespace, image, command)
+	jobs, err := jobManager.CreateJobOnNodes(jobName, nodes, jobNamespace, image, command, tolerations)
 	if err != nil {
 		log.Printf("Warning: %v", err)
 	}

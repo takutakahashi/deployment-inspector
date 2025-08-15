@@ -14,7 +14,7 @@ import (
 
 // JobManagerInterface defines operations for job management
 type JobManagerInterface interface {
-	CreateJobOnNodes(jobName string, nodes []string, namespace, image string, command []string) ([]string, error)
+	CreateJobOnNodes(jobName string, nodes []string, namespace, image string, command []string, tolerations []corev1.Toleration) ([]string, error)
 }
 
 // JobManager manages job-related operations
@@ -30,7 +30,7 @@ func NewJobManager(clientset kubernetes.Interface) JobManagerInterface {
 }
 
 // CreateJobOnNodes creates jobs on specified nodes
-func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace, image string, command []string) ([]string, error) {
+func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace, image string, command []string, tolerations []corev1.Toleration) ([]string, error) {
 	if len(command) == 0 {
 		command = []string{"echo", "Job running on node"}
 	}
@@ -62,6 +62,7 @@ func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace
 						NodeSelector: map[string]string{
 							"kubernetes.io/hostname": node,
 						},
+						Tolerations: tolerations,
 						Containers: []corev1.Container{
 							{
 								Name:    "job-container",
