@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/takutakahashi/deployment-inspector/pkg/k8s"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -41,6 +43,7 @@ and run jobs on the nodes where deployment pods are running.`,
 			jobNamespace := viper.GetString("job-namespace")
 			image := viper.GetString("image")
 			commandStr := viper.GetString("command")
+			tolerationsStr := viper.GetString("tolerations")
 
 			// If job namespace is not specified, use the deployment namespace
 			if jobNamespace == "" {
@@ -55,7 +58,16 @@ and run jobs on the nodes where deployment pods are running.`,
 				}
 			}
 
-			return runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, command)
+			// Parse tolerations from JSON string
+			var tolerations []corev1.Toleration
+			if tolerationsStr != "" {
+				err := json.Unmarshal([]byte(tolerationsStr), &tolerations)
+				if err != nil {
+					return fmt.Errorf("failed to parse tolerations JSON: %v", err)
+				}
+			}
+
+			return runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image, command, tolerations)
 		},
 	}
 )
@@ -69,10 +81,12 @@ func init() {
 	runJobCmd.Flags().StringP("job-namespace", "j", "", "Kubernetes namespace for job (defaults to deployment namespace)")
 	runJobCmd.Flags().StringP("image", "i", "busybox", "Container image for the job")
 	runJobCmd.Flags().StringP("command", "c", "", "Command to run in the job (comma-separated)")
+	runJobCmd.Flags().StringP("tolerations", "t", "", "Tolerations for the job pods (JSON format)")
 	
 	viper.BindPFlag("job-namespace", runJobCmd.Flags().Lookup("job-namespace"))
 	viper.BindPFlag("image", runJobCmd.Flags().Lookup("image"))
 	viper.BindPFlag("command", runJobCmd.Flags().Lookup("command"))
+	viper.BindPFlag("tolerations", runJobCmd.Flags().Lookup("tolerations"))
 
 	// Add commands to root
 	rootCmd.AddCommand(listCmd)
@@ -122,7 +136,7 @@ func listPodsAndNodes(deploymentName, namespace string) error {
 	return nil
 }
 
-func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image string, command []string) error {
+func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image string, command []string, tolerations []corev1.Toleration) error {
 	client := k8s.NewClient("")
 	clientset, err := client.GetClient()
 	if err != nil {
@@ -150,7 +164,7 @@ func runJobOnNodes(deploymentName, jobName, namespace, jobNamespace, image strin
 
 	fmt.Printf("\nCreating jobs on %d nodes in namespace %s...\n", len(nodes), jobNamespace)
 	
-	jobs, err := jobManager.CreateJobOnNodes(jobName, nodes, jobNamespace, image, command)
+	jobs, err := jobManager.CreateJobOnNodes(jobName, nodes, jobNamespace, image, command, tolerations)
 	if err != nil {
 		log.Printf("Warning: %v", err)
 	}

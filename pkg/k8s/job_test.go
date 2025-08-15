@@ -4,55 +4,78 @@ import (
 	"context"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestJobManager_CreateJobOnNodes(t *testing.T) {
 	tests := []struct {
-		name      string
-		jobName   string
-		nodes     []string
-		namespace string
-		image     string
-		command   []string
-		wantErr   bool
+		name        string
+		jobName     string
+		nodes       []string
+		namespace   string
+		image       string
+		command     []string
+		tolerations []corev1.Toleration
+		wantErr     bool
 	}{
 		{
-			name:      "create job with default command",
-			jobName:   "test-job",
-			nodes:     []string{"node1", "node2"},
-			namespace: "default",
-			image:     "busybox",
-			command:   nil,
-			wantErr:   false,
+			name:        "create job with default command",
+			jobName:     "test-job",
+			nodes:       []string{"node1", "node2"},
+			namespace:   "default",
+			image:       "busybox",
+			command:     nil,
+			tolerations: nil,
+			wantErr:     false,
 		},
 		{
-			name:      "create job with custom command",
+			name:        "create job with custom command",
+			jobName:     "test-job",
+			nodes:       []string{"node1"},
+			namespace:   "custom-namespace",
+			image:       "alpine",
+			command:     []string{"ls", "-la"},
+			tolerations: nil,
+			wantErr:     false,
+		},
+		{
+			name:        "create job with node containing dots",
+			jobName:     "test-job",
+			nodes:       []string{"node1.example.com"},
+			namespace:   "default",
+			image:       "busybox",
+			command:     []string{"echo", "test"},
+			tolerations: nil,
+			wantErr:     false,
+		},
+		{
+			name:        "create job with empty nodes",
+			jobName:     "test-job",
+			nodes:       []string{},
+			namespace:   "default",
+			image:       "busybox",
+			command:     []string{"echo", "test"},
+			tolerations: nil,
+			wantErr:     false,
+		},
+		{
+			name:      "create job with tolerations",
 			jobName:   "test-job",
 			nodes:     []string{"node1"},
-			namespace: "custom-namespace",
-			image:     "alpine",
-			command:   []string{"ls", "-la"},
-			wantErr:   false,
-		},
-		{
-			name:      "create job with node containing dots",
-			jobName:   "test-job",
-			nodes:     []string{"node1.example.com"},
 			namespace: "default",
 			image:     "busybox",
 			command:   []string{"echo", "test"},
-			wantErr:   false,
-		},
-		{
-			name:      "create job with empty nodes",
-			jobName:   "test-job",
-			nodes:     []string{},
-			namespace: "default",
-			image:     "busybox",
-			command:   []string{"echo", "test"},
-			wantErr:   false,
+			tolerations: []corev1.Toleration{
+				{
+					Key:      "key1",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "value1",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+			wantErr: false,
 		},
 	}
 
@@ -63,7 +86,7 @@ func TestJobManager_CreateJobOnNodes(t *testing.T) {
 			jm := &JobManager{clientset: clientset}
 
 			// Execute
-			jobs, err := jm.CreateJobOnNodes(tt.jobName, tt.nodes, tt.namespace, tt.image, tt.command)
+			jobs, err := jm.CreateJobOnNodes(tt.jobName, tt.nodes, tt.namespace, tt.image, tt.command, tt.tolerations)
 
 			// Check error
 			if (err != nil) != tt.wantErr {
@@ -128,8 +151,12 @@ func TestJobManager_CreateJobOnNodes(t *testing.T) {
 				if job.Spec.Template.Labels["job-name"] != jobName {
 					t.Errorf("Expected job-name label %s, got %s", jobName, job.Spec.Template.Labels["job-name"])
 				}
+
+				// Verify tolerations
+				if len(tt.tolerations) != len(job.Spec.Template.Spec.Tolerations) {
+					t.Errorf("Expected %d tolerations, got %d", len(tt.tolerations), len(job.Spec.Template.Spec.Tolerations))
+				}
 			}
 		})
 	}
 }
-
