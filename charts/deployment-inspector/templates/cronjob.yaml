@@ -82,7 +82,11 @@ spec:
             {{- end }}
             {{- if .Values.deploymentInspector.job.tolerations }}
             - "--tolerations"
+            {{- if kindIs "string" .Values.deploymentInspector.job.tolerations }}
+            - {{ .Values.deploymentInspector.job.tolerations | quote }}
+            {{- else }}
             - {{ .Values.deploymentInspector.job.tolerations | toJson | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- with .Values.env }}
