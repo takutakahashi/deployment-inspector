@@ -63,6 +63,14 @@ deploymentInspector:
     # Command to run in the job
     command: []
     # Example: ["sh", "-c", "echo 'Hello from node'"]
+    # Tolerations for the job pods (will be passed to the CLI)
+    tolerations: []
+    # Example:
+    # tolerations:
+    #   - key: "node.kubernetes.io/not-ready"
+    #     operator: "Exists"
+    #     effect: "NoExecute"
+    #     tolerationSeconds: 300
 
 # Pod resource limits and requests
 resources: {}

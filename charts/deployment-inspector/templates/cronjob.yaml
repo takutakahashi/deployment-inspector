@@ -80,6 +80,10 @@ spec:
             - "--command"
             - {{ join "," .Values.deploymentInspector.job.command | quote }}
             {{- end }}
+            {{- if .Values.deploymentInspector.job.tolerations }}
+            - "--tolerations"
+            - {{ .Values.deploymentInspector.job.tolerations | toJson | quote }}
+            {{- end }}
             {{- end }}
             {{- with .Values.env }}
             env:
