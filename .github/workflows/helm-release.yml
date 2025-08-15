@@ -62,23 +62,3 @@ jobs:
           helm push deployment-inspector-*.tgz oci://${{ env.REGISTRY }}/takutakahashi/charts
           echo "Chart pushed to: oci://${{ env.REGISTRY }}/takutakahashi/charts/deployment-inspector:${CHART_VERSION}"
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: deployment-inspector-*.tgz
-          generate_release_notes: true
-          body: |
-            ## Helm Chart Release ${{ steps.get_version.outputs.VERSION }}
-            
-            ### Installation
-            ```bash
-            helm install deployment-inspector oci://ghcr.io/takutakahashi/charts/deployment-inspector --version ${{ steps.get_version.outputs.VERSION }}
-            ```
-            
-            ### Upgrade
-            ```bash
-            helm upgrade deployment-inspector oci://ghcr.io/takutakahashi/charts/deployment-inspector --version ${{ steps.get_version.outputs.VERSION }}
-            ```
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
