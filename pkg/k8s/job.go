@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -42,7 +41,7 @@ func (jm *JobManager) CreateJobOnNodes(jobName string, nodes []string, namespace
 	for _, node := range nodes {
 		rand.Seed(time.Now().UnixNano())
 		randomSuffix := fmt.Sprintf("%06d", rand.Intn(1000000))
-		jobInstanceName := fmt.Sprintf("%s-%s-%s", jobName, strings.ReplaceAll(node, ".", "-"), randomSuffix)
+		jobInstanceName := fmt.Sprintf("%s-%s", jobName, randomSuffix)
 		
 		ttlSecondsAfterFinished := int32(300) // 5 minutes after completion
 		job := &batchv1.Job{
