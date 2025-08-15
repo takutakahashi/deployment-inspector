@@ -33,5 +33,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "deployment-inspector.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ include "deployment-inspector.namespace" . }}
 {{- end }}
