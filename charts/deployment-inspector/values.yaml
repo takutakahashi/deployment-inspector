@@ -2,10 +2,6 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-
-# Namespace where the application will be deployed
-# If not set, uses the Release.Namespace
-namespace: ""
 replicaCount: 1
 
 image:

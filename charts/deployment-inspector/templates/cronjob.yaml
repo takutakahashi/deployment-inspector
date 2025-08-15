@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  namespace: {{ include "deployment-inspector.namespace" . }}
+  namespace: {{ .Release.Namespace }}
   name: {{ include "deployment-inspector.fullname" . }}
   labels:
     {{- include "deployment-inspector.labels" . | nindent 4 }}

@@ -60,14 +60,3 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
-{{/*
-Get the namespace for resources
-*/}}
-{{- define "deployment-inspector.namespace" -}}
-{{- if .Values.namespace }}
-{{- .Values.namespace }}
-{{- else }}
-{{- .Release.Namespace }}
-{{- end }}
-{{- end }}
-EOF < /dev/null
